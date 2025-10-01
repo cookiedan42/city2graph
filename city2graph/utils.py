@@ -1905,6 +1905,14 @@ class GraphAnalyzer:
             return center_point
         return [center_point]
 
+    class DummyRootNode:
+        """
+        Dummy root node class for shortest path calculations.
+
+        This class is used as a root node for shortest path calculations to prevent
+        duplicative searching when the same node is within range of multiple source nodes.
+        """
+
     def _compute_nodes_within_distance(
         self,
         graph: nx.Graph | nx.MultiGraph,
@@ -1952,17 +1960,27 @@ class GraphAnalyzer:
             nearest_node = self._get_nearest_node(point, nodes_gdf, node_id_name)
             source_nodes.append(nearest_node)
 
-        # Compute single-source shortest paths from all sources
-        all_reachable = set()
-        for source in source_nodes:
-            lengths = nx.single_source_dijkstra_path_length(
-                graph,
-                source,
-                cutoff=distance,
-                weight=edge_attr,
-            )
-            all_reachable.update(lengths.keys())
-        return all_reachable
+        # run a single-source shortest path from a dummy root node
+        # dummy root node prevents duplicative searching when the same node is within range of multiple source nodes
+
+        root = self.DummyRootNode()
+        graph.add_weighted_edges_from(
+            ((root, source, 0) for source in source_nodes), weight=edge_attr
+        )
+
+        lengths = nx.single_source_dijkstra_path_length(
+            graph,
+            root,
+            cutoff=distance,
+            weight=edge_attr,
+        )
+
+        # restore the original graph
+        graph.remove_node(root)
+
+        reachable = set(lengths.keys())
+        reachable.remove(root)
+        return reachable
 
     def _get_nearest_node(
         self,
